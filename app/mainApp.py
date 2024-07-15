@@ -1,6 +1,8 @@
+import pycountry
 import streamlit as st
 import openai
 from streamlit_option_menu import option_menu
+from datetime import datetime
 
 # region prompts
 promptChatbot = """
@@ -72,6 +74,16 @@ Provide Clear Guidance:
 Encourage Follow-Up:
 - Encourage the user to check back in if they have any more questions or if their symptoms change, with a reminder like "Feel free to reach out again if you have any more questions or if your symptoms change."
 """
+
+educational_resources_prompt = """
+You are a knowledgeable medical educator. Please provide a list of educational topics that would be beneficial for users to learn about. Include a variety of topics such as common diseases, anatomy and physiology, nutrition, healthy eating, mental health, fitness, and preventive healthcare. For each topic, provide a detailed explanation that can be displayed under each topic tab in a user-friendly web application.
+"""
+
+emergency_numbers_prompt = """
+You are an expert in global emergency services. Please provide the emergency phone numbers for police, fire, and ambulance services in the following country: {}.
+"""
+
+
 # endregion
 
 client = openai.OpenAI(
@@ -134,23 +146,19 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # Initialize session state variables for authentication, API key, and conversation history
-if 'logged_in' not in st.session_state:
-    st.session_state.logged_in = False
 if 'conversation' not in st.session_state:
     st.session_state.conversation = []
 if 'symptom_conversation' not in st.session_state:
     st.session_state.symptom_conversation = []
 if 'api_key' not in st.session_state:
     st.session_state.api_key = ""
+if 'medication_reminders' not in st.session_state:
+    st.session_state.medication_reminders = []
+if 'appointment_reminders' not in st.session_state:
+    st.session_state.appointment_reminders = []
+if 'educational_topics' not in st.session_state:
+    st.session_state.educational_topics = []
 
-# Authentication functions
-def handle_login(username, password):
-    if username == "admin" and password == "password":  # Placeholder for actual authentication
-        st.session_state.logged_in = True
-        st.session_state.username = username
-        st.experimental_rerun()
-    else:
-        st.error("Invalid username or password")
 
 # Function to handle OpenAI API interaction
 def ask_openai(messages, role="virtual_nurse"):
@@ -165,111 +173,165 @@ def ask_openai(messages, role="virtual_nurse"):
     response = chat_completion.choices[0].message.content
     return response
 
-# Login form
-if not st.session_state.logged_in:
-    st.header("🔑 Login")
-    with st.form(key='login_form'):
-        username = st.text_input("👤 Username")
-        password = st.text_input("🔒 Password", type="password")
-        submit_button = st.form_submit_button(label='Login')
-        if submit_button:
-            handle_login(username, password)
-else:
-    # Sidebar for API key input and navigation
-    with st.sidebar:
-        st.sidebar.header("API Key Configuration")
-        api_key_input = st.text_input("Enter your OpenAI API Key", value=st.session_state.api_key, type="password")
-        if st.button("Save API Key"):
-            st.session_state.api_key = api_key_input
-            st.success("API Key saved!")
 
-        option = option_menu(None, ["🏠 Home", "🩺 Symptom Checker", "⏰ Reminders", "📈 Health Monitoring",
-                                    "📚 Educational Resources", "🚨 Emergency Alerts"],
-                             icons=["icon", "icon", "icon", "icon", "icon", "icon"],
-                             menu_icon="cast", default_index=0, orientation="vertical")
-        if st.button("Logout"):
-            st.session_state.logged_in = False
-            st.session_state.username = None
-            st.experimental_rerun()
+def get_educational_topics():
+    prompt = [{"role": "system", "content": educational_resources_prompt}]
+    chat_completion = client.chat.completions.create(
+        model="gpt-3.5-turbo",
+        messages=prompt,
+        temperature=0.7,
+        max_tokens=1000,
+    )
+    response = chat_completion.choices[0].message.content
+    topics = response.split("\n\n")
+    return topics
 
-    # Home page interaction with virtual nurse
-    if option == "🏠 Home":
-        st.header("Chat with Your Nurse Serena 💬")
-        # Chat container
-        st.markdown('<div class="chat-container">', unsafe_allow_html=True)
-        for message in st.session_state.conversation:
-            if message["role"] == "user":
-                st.markdown(f'<div class="user-message">{message["content"]}</div>', unsafe_allow_html=True)
-            else:
-                st.markdown(f'<div class="bot-message">{message["content"]}</div>', unsafe_allow_html=True)
-        st.markdown('</div>', unsafe_allow_html=True)
+def get_emergency_numbers(country):
+    prompt = [{"role": "system", "content": emergency_numbers_prompt.format(country)}]
+    chat_completion = client.chat.completions.create(
+        model="gpt-3.5-turbo",
+        messages=prompt,
+        temperature=0.7,
+        max_tokens=1000,
+    )
+    response = chat_completion.choices[0].message.content
+    return response
 
-        # Input bar at the bottom
-        with st.form(key='input_form', clear_on_submit=True):
-            user_input = st.text_input("You: ", "")
-            submit_button = st.form_submit_button(label='Send')
 
-        if submit_button and user_input:
-            st.session_state.conversation.append({"role": "user", "content": user_input})
-            with st.spinner('Fetching response...'):
-                response = ask_openai(st.session_state.conversation)
-            st.session_state.conversation.append({"role": "assistant", "content": response})
-            st.experimental_rerun()
+# Sidebar for API key input and navigation
+with st.sidebar:
+    st.sidebar.header("API Key Configuration")
+    api_key_input = st.text_input("Enter your OpenAI API Key", value=st.session_state.api_key, type="password")
+    if st.button("Save API Key"):
+        st.session_state.api_key = api_key_input
+        st.success("API Key saved!")
 
-    # Symptom Checker and Triage
-    elif option == "🩺 Symptom Checker":
-        st.header("Symptom Checker 🩺")
-        # Chat container
-        st.markdown('<div class="chat-container">', unsafe_allow_html=True)
-        for message in st.session_state.symptom_conversation:
-            if message["role"] == "user":
-                st.markdown(f'<div class="user-message">{message["content"]}</div>', unsafe_allow_html=True)
-            else:
-                st.markdown(f'<div class="bot-message">{message["content"]}</div>', unsafe_allow_html=True)
-        st.markdown('</div>', unsafe_allow_html=True)
+    option = option_menu(None, ["🏠 Home", "🩺 Symptom Checker", "⏰ Reminders", "📈 Health Monitoring",
+                                "📚 Educational Resources", "🚨 Emergency Alerts"],
+                         icons=["icon", "icon", "icon", "icon", "icon", "icon"],
+                         menu_icon="cast", default_index=0, orientation="vertical")
 
-        # Input bar at the bottom
-        with st.form(key='symptom_input_form', clear_on_submit=True):
-            symptoms_input = st.text_input("Describe your symptoms:", "")
-            submit_button = st.form_submit_button(label='Send')
-
-        if submit_button and symptoms_input:
-            st.session_state.symptom_conversation.append({"role": "user", "content": symptoms_input})
-            with st.spinner('Fetching response...'):
-                response = ask_openai(st.session_state.symptom_conversation, role="symptom_checker")
-            st.session_state.symptom_conversation.append({"role": "assistant", "content": response})
-            st.experimental_rerun()
-
-    # Medication and Appointment Reminders
-    elif option == "⏰ Reminders":
-        st.header("Reminders ⏰")
-        reminder_type = st.selectbox("Reminder Type", ["Medication 💊", "Appointment 🗓️"])
-        if reminder_type == "Medication 💊":
-            med_name = st.text_input("Medication Name")
-            dosage = st.text_input("Dosage")
-            reminder_time = st.time_input("Reminder Time")
-            if st.button("Set Reminder"):
-                st.write(f"Reminder set for {med_name} at {reminder_time}.")
+# Home page interaction with virtual nurse
+if option == "🏠 Home":
+    st.header("Chat with Your Nurse Serena 💬")
+    # Chat container
+    st.markdown('<div class="chat-container">', unsafe_allow_html=True)
+    for message in st.session_state.conversation:
+        if message["role"] == "user":
+            st.markdown(f'<div class="user-message">{message["content"]}</div>', unsafe_allow_html=True)
         else:
-            appointment_details = st.text_input("Appointment Details")
-            appointment_time = st.time_input("Appointment Time")
-            if st.button("Set Reminder"):
-                st.write(f"Reminder set for appointment at {appointment_time}.")
+            st.markdown(f'<div class="bot-message">{message["content"]}</div>', unsafe_allow_html=True)
+    st.markdown('</div>', unsafe_allow_html=True)
 
-    # Health Monitoring and Data Logging
-    elif option == "📈 Health Monitoring":
-        st.header("Health Monitoring 📈")
-        st.write("Connect your wearable device to monitor your health in real-time. (Placeholder for integration)")
+    # Input bar at the bottom
+    with st.form(key='input_form', clear_on_submit=True):
+        user_input = st.text_input("You: ", "")
+        submit_button = st.form_submit_button(label='Send')
 
-    # Educational Resources
-    elif option == "📚 Educational Resources":
-        st.header("Educational Resources 📚")
-        st.write("Access personalized educational content to manage your health. (Placeholder for content)")
+    if submit_button and user_input:
+        st.session_state.conversation.append({"role": "user", "content": user_input})
+        with st.spinner('Fetching response...'):
+            response = ask_openai(st.session_state.conversation)
+        st.session_state.conversation.append({"role": "assistant", "content": response})
+        st.experimental_rerun()
 
-    # Emergency Alerts
-    elif option == "🚨 Emergency Alerts":
-        st.header("Emergency Alerts 🚨")
-        st.write("Get immediate help in case of an emergency. (Placeholder for alerts)")
+# Symptom Checker and Triage
+elif option == "🩺 Symptom Checker":
+    st.header("Symptom Checker 🩺")
+    # Chat container
+    st.markdown('<div class="chat-container">', unsafe_allow_html=True)
+    for message in st.session_state.symptom_conversation:
+        if message["role"] == "user":
+            st.markdown(f'<div class="user-message">{message["content"]}</div>', unsafe_allow_html=True)
+        else:
+            st.markdown(f'<div class="bot-message">{message["content"]}</div>', unsafe_allow_html=True)
+    st.markdown('</div>', unsafe_allow_html=True)
 
-    st.sidebar.title("About")
-    st.sidebar.info("This virtual nurse app is developed to provide empathetic and effective healthcare management. 🌟")
+    # Input bar at the bottom
+    with st.form(key='symptom_input_form', clear_on_submit=True):
+        symptoms_input = st.text_input("Describe your symptoms:", "")
+        submit_button = st.form_submit_button(label='Send')
+
+    if submit_button and symptoms_input:
+        st.session_state.symptom_conversation.append({"role": "user", "content": symptoms_input})
+        with st.spinner('Fetching response...'):
+            response = ask_openai(st.session_state.symptom_conversation, role="symptom_checker")
+        st.session_state.symptom_conversation.append({"role": "assistant", "content": response})
+        st.experimental_rerun()
+
+# Medication and Appointment Reminders
+elif option == "⏰ Reminders":
+    st.header("Reminders ⏰")
+    reminder_type = st.selectbox("Reminder Type", ["Medication 💊", "Appointment 🗓️"])
+    if reminder_type == "Medication 💊":
+        med_name = st.text_input("Medication Name")
+        dosage = st.text_input("Dosage")
+        reminder_date = st.date_input("Reminder Date")
+        reminder_time = st.time_input("Reminder Time")
+        if st.button("Set Reminder"):
+            reminder_datetime = datetime.combine(reminder_date, reminder_time)
+            st.session_state.medication_reminders.append(
+                {"name": med_name, "dosage": dosage, "datetime": reminder_datetime})
+            st.success(f"Reminder set for {med_name} at {reminder_datetime}.")
+    else:
+        appointment_details = st.text_input("Appointment Details")
+        appointment_date = st.date_input("Appointment Date")
+        appointment_time = st.time_input("Appointment Time")
+        if st.button("Set Reminder"):
+            appointment_datetime = datetime.combine(appointment_date, appointment_time)
+            st.session_state.appointment_reminders.append(
+                {"details": appointment_details, "datetime": appointment_datetime})
+            st.success(f"Reminder set for appointment at {appointment_datetime}.")
+
+    st.header("Upcoming Reminders")
+    st.subheader("Medications")
+    for reminder in st.session_state.medication_reminders:
+        st.write(
+            f"{reminder['datetime'].strftime('%A, %B %d, %Y at %I:%M %p')}: Take {reminder['dosage']} of {reminder['name']}")
+
+    st.subheader("Appointments")
+    for reminder in st.session_state.appointment_reminders:
+        st.write(f"{reminder['datetime'].strftime('%A, %B %d, %Y at %I:%M %p')}: {reminder['details']}")
+
+# Health Monitoring and Data Logging
+elif option == "📈 Health Monitoring":
+    st.header("Health Monitoring 📈")
+    st.write("Connect your wearable device to monitor your health in real-time. (Placeholder for integration)")
+
+# Educational Resources
+elif option == "📚 Educational Resources":
+    st.header("Educational Resources 📚")
+
+    # Refresh button
+    if st.button('Refresh Topics'):
+        with st.spinner('Fetching educational topics...'):
+            st.session_state.educational_topics = get_educational_topics()
+
+    # Fetch educational topics if not already done
+    if not st.session_state.educational_topics:
+        with st.spinner('Fetching educational topics...'):
+            st.session_state.educational_topics = get_educational_topics()
+
+    # Display educational topics in tabs
+    topics = st.session_state.educational_topics
+    if topics:
+        tabs = st.tabs([topic["title"] for topic in topics])
+        for tab, topic in zip(tabs, topics):
+            with tab:
+                st.markdown(f"### {topic['title']}\n\n{topic['content']}")
+
+# Emergency Alerts
+elif option == "🚨 Emergency Alerts":
+    st.header("Emergency Alerts 🚨")
+
+    countries = [country.name for country in pycountry.countries]
+    selected_country = st.selectbox("Select a country", countries)
+
+    if st.button("Get Emergency Numbers"):
+        with st.spinner('Fetching emergency numbers...'):
+            emergency_numbers = get_emergency_numbers(selected_country)
+        st.markdown(f"### Emergency Numbers for {selected_country}\n\n{emergency_numbers}")
+
+
+st.sidebar.title("About")
+st.sidebar.info("This virtual nurse app is developed to provide empathetic and effective healthcare management. 🌟")
