@@ -76,8 +76,15 @@ Encourage Follow-Up:
 """
 
 educational_resources_prompt = """
-You are a knowledgeable medical educator. Please provide a list of educational topics that would be beneficial for users to learn about. Include a variety of topics such as common diseases, anatomy and physiology, nutrition, healthy eating, mental health, fitness, and preventive healthcare. For each topic, provide a detailed explanation that can be displayed under each topic tab in a user-friendly web application.
+You are a knowledgeable medical educator. Please provide a list of educational topics that would be beneficial for users to learn about. Each topic should be formatted as a heading followed by a colon and then a detailed explanation. Topics should include areas such as common diseases, anatomy and physiology, nutrition, healthy eating, mental health, fitness, and preventive healthcare. Format each topic like this:
+
+Topic Name: Provide a detailed explanation that can be displayed under each topic tab in a user-friendly web application. Include important points, practical tips, and any relevant guidelines.
+
+Here are some example topics to guide your formatting:
+- Heart Health: Understanding how to maintain a healthy heart through diet, exercise, and regular check-ups is essential for preventing heart disease.
+- Diabetes Management: Learn about managing diabetes through proper diet, exercise, medication adherence, and monitoring blood sugar levels.
 """
+
 
 emergency_numbers_prompt = """
 You are an expert in global emergency services. Please provide the emergency phone numbers for police, fire, and ambulance services in the following country: {}.
@@ -166,6 +173,7 @@ with st.sidebar:
                                 "📚 Educational Resources", "🚨 Emergency Alerts"],
                          icons=["icon", "icon", "icon", "icon", "icon", "icon"],
                          menu_icon="cast", default_index=0, orientation="vertical")
+
 client = openai.OpenAI(
     api_key=st.session_state.api_key,
     base_url="https://api.aimlapi.com",
@@ -194,8 +202,9 @@ def get_educational_topics():
         max_tokens=1000,
     )
     response = chat_completion.choices[0].message.content
-    topics = response.split("\n\n")
-    return topics
+    topics = [topic.split(": ", 1) for topic in response.split("\n\n") if ": " in topic]  # Ensure ':' exists to split
+    return dict(topics)
+
 
 def get_emergency_numbers(country):
     prompt = [{"role": "system", "content": emergency_numbers_prompt.format(country)}]
@@ -312,12 +321,12 @@ elif option == "📚 Educational Resources":
             st.session_state.educational_topics = get_educational_topics()
 
     # Display educational topics in tabs
-    topics = st.session_state.educational_topics
-    if topics:
-        tabs = st.tabs([topic["title"] for topic in topics])
-        for tab, topic in zip(tabs, topics):
+    topics_dict = st.session_state.educational_topics
+    if topics_dict:
+        tabs = st.tabs(list(topics_dict.keys()))
+        for tab, key in zip(tabs, topics_dict):
             with tab:
-                st.markdown(f"### {topic['title']}\n\n{topic['content']}")
+                st.markdown(topics_dict[key])
 
 # Emergency Alerts
 elif option == "🚨 Emergency Alerts":
