@@ -86,11 +86,6 @@ You are an expert in global emergency services. Please provide the emergency pho
 
 # endregion
 
-client = openai.OpenAI(
-    api_key="",
-    base_url="https://api.aimlapi.com",
-)
-
 # Custom CSS for styling
 st.markdown("""
     <style>
@@ -159,6 +154,22 @@ if 'appointment_reminders' not in st.session_state:
 if 'educational_topics' not in st.session_state:
     st.session_state.educational_topics = []
 
+# Sidebar for API key input and navigation
+with st.sidebar:
+    st.sidebar.header("API Key Configuration")
+    api_key_input = st.text_input("Enter your OpenAI API Key", value=st.session_state.api_key, type="password")
+    if st.button("Save API Key"):
+        st.session_state.api_key = api_key_input
+        st.success("API Key saved!")
+
+    option = option_menu(None, ["🏠 Home", "🩺 Symptom Checker", "⏰ Reminders", "📈 Health Monitoring",
+                                "📚 Educational Resources", "🚨 Emergency Alerts"],
+                         icons=["icon", "icon", "icon", "icon", "icon", "icon"],
+                         menu_icon="cast", default_index=0, orientation="vertical")
+client = openai.OpenAI(
+    api_key=st.session_state.api_key,
+    base_url="https://api.aimlapi.com",
+)
 
 # Function to handle OpenAI API interaction
 def ask_openai(messages, role="virtual_nurse"):
@@ -198,18 +209,6 @@ def get_emergency_numbers(country):
     return response
 
 
-# Sidebar for API key input and navigation
-with st.sidebar:
-    st.sidebar.header("API Key Configuration")
-    api_key_input = st.text_input("Enter your OpenAI API Key", value=st.session_state.api_key, type="password")
-    if st.button("Save API Key"):
-        st.session_state.api_key = api_key_input
-        st.success("API Key saved!")
-
-    option = option_menu(None, ["🏠 Home", "🩺 Symptom Checker", "⏰ Reminders", "📈 Health Monitoring",
-                                "📚 Educational Resources", "🚨 Emergency Alerts"],
-                         icons=["icon", "icon", "icon", "icon", "icon", "icon"],
-                         menu_icon="cast", default_index=0, orientation="vertical")
 
 # Home page interaction with virtual nurse
 if option == "🏠 Home":
